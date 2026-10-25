@@ -79,6 +79,7 @@
     flex-wrap: wrap;
     align-items: center;
     gap: 12px 16px;
+    padding-inline: 21px; /* 카드 테두리 1px + 안쪽 여백 20px: 카드 안 내용과 같은 세로줄 */
   }
   header h1 { margin: 0; font-size: 1.25rem; font-weight: 700; margin-right: auto; }
   .controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
@@ -95,6 +96,12 @@
   select { min-width: 9rem; font-weight: 600; }
   button:hover, select:hover { border-color: var(--accent); }
   :focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  /* 테마 스위치: 켜면 동그라미가 오른쪽으로 */
+  .switch { display: inline-flex; align-items: center; gap: 8px; }
+  .switch .track { position: relative; width: 36px; height: 20px; border-radius: 10px; background: var(--cloud); }
+  .switch .thumb { position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--surface); }
+  .switch[aria-checked="true"] .track { background: var(--accent); }
+  .switch[aria-checked="true"] .thumb { transform: translateX(16px); }
   .updated { color: var(--muted); font-size: 0.9rem; width: 100%; }
 
   section { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 20px; min-width: 0; }
@@ -114,11 +121,14 @@
   .tips { display: grid; gap: 6px; margin-top: 10px; padding: 0; list-style: none; }
   .tips li { background: var(--bg); border-radius: 10px; padding: 8px 12px; font-size: 0.95rem; }
 
-  .details { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; align-content: start; }
-  .tile { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; display: grid; gap: 2px; }
-  .tile .label { color: var(--muted); font-size: 0.85rem; }
-  .tile .value { font-size: 1.35rem; font-weight: 600; }
-  .tile .sub { font-size: 0.9rem; color: var(--muted); }
+  /* 상세: 구분선 목록. 이름은 왼쪽, 값은 오른쪽 끝에 맞춰 위아래로 훑어보기 쉽게 */
+  .details { display: grid; align-content: start; margin: 0; }
+  .detail { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 11px 0; border-top: 1px solid var(--line); }
+  .detail:first-child { border-top: none; padding-top: 0; }
+  .detail dt { color: var(--muted); font-size: 0.95rem; }
+  .detail dd { margin: 0; display: flex; align-items: baseline; gap: 10px; }
+  .detail .value { font-size: 1.2rem; font-weight: 600; }
+  .detail .sub { font-size: 0.85rem; color: var(--muted); }
   .grade { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; font-size: 0.95rem; }
   .grade::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: currentColor; }
   .grade.good { color: var(--aq-good); }
@@ -127,7 +137,9 @@
   .grade.worst { color: var(--aq-worst); }
 
   /* 시간별 */
-  .hourly-scroll { overflow-x: auto; margin: 0 -20px; padding: 0 20px 6px 4px; scrollbar-width: thin; }
+  /* 스크롤바는 옆으로 넘기는 동안에만 보여요 (투명하게 숨겨서 자리는 그대로) */
+  .hourly-scroll { overflow-x: auto; margin: 0 -20px; padding: 0 20px 6px 4px; scrollbar-width: thin; scrollbar-color: transparent transparent; }
+  .hourly-scroll.scrolling { scrollbar-color: var(--cloud) transparent; }
   .hourly-inner { position: relative; }
   .h-row { display: grid; justify-items: center; }
   .h-row > div { text-align: center; width: 100%; }
@@ -164,13 +176,12 @@
   .w-hi { text-align: left; }
   .bar { position: relative; height: 8px; border-radius: 4px; background: var(--bg); }
   .bar i { position: absolute; top: 0; bottom: 0; border-radius: 4px; background: linear-gradient(90deg, var(--cool), var(--warm)); }
-  .w-note { margin: 12px 0 0; color: var(--muted); font-size: 0.8rem; }
+  .note { margin: 12px 0 0; color: var(--muted); font-size: 0.8rem; }
 
   /* 불러오는 중: 실제 화면과 같은 틀에 글자 대신 회색 막대 */
   .sk { display: block; max-width: 100%; border-radius: 6px; background: var(--line); }
   .sk.round { border-radius: 50%; }
   .skeleton .now { gap: 10px; }
-  .skeleton .tile .sk { margin: 3px 0; }
   .skeleton .hourly-scroll { overflow: hidden; }
   .skeleton .h-row .sk { margin: 4px auto; }
   .skeleton .w-day { gap: 5px; }
@@ -188,6 +199,7 @@
   }
   @media (max-width: 520px) {
     section { padding: 16px; }
+    header { padding-inline: 17px; }
     .hourly-scroll { margin: 0 -16px; padding: 0 16px 6px 0; }
     .now-temp { font-size: 3.8rem; }
     .w-row { grid-template-columns: 3.6rem 2rem 2.8rem 2.2rem minmax(40px, 1fr) 2.2rem; gap: 8px; }
@@ -198,6 +210,7 @@
     @keyframes fade { from { transform: translateY(4px); } to { transform: none; } }
     .sk { background: linear-gradient(90deg, var(--line) 30%, var(--surface) 50%, var(--line) 70%) 0 0 / 300% 100%; animation: shimmer 1.4s linear infinite; }
     @keyframes shimmer { from { background-position: 100% 0; } to { background-position: 0 0; } }
+    .switch .track, .switch .thumb { transition: background 0.2s, transform 0.2s; }
   }
 </style>
 </head>
@@ -208,9 +221,7 @@
     <div class="controls">
       <label for="region" class="sr-only" hidden>지역</label>
       <select id="region" aria-label="지역 선택"></select>
-      <button id="locate" type="button">현재 위치</button>
-      <button id="refresh" type="button">새로고침</button>
-      <button id="theme" type="button" aria-pressed="false">어둡게</button>
+      <button id="theme" type="button" class="switch" role="switch" aria-checked="false">다크 모드<span class="track" aria-hidden="true"><span class="thumb"></span></span></button>
     </div>
     <div class="updated" id="updated">예보를 불러오는 중이에요…</div>
   </header>
@@ -336,15 +347,6 @@
   const DIRS = ["북", "북북동", "북동", "동북동", "동", "동남동", "남동", "남남동", "남", "남남서", "남서", "서남서", "서", "서북서", "북서", "북북서"];
   const windDir = deg => DIRS[Math.round(deg / 22.5) % 16] + "풍";
 
-  function uvLevel(uv) {
-    if (uv == null) return "-";
-    if (uv < 3) return "낮음";
-    if (uv < 6) return "보통";
-    if (uv < 8) return "높음";
-    if (uv < 11) return "매우 높음";
-    return "위험";
-  }
-
   function pmGrade(v, type) {
     if (v == null) return null;
     const t = type === "pm10" ? [30, 80, 150] : [15, 35, 75];
@@ -366,7 +368,7 @@
   const sk = (w, h, cls = "", tag = "i") => `<${tag} class="sk${cls}" style="width:${w};height:${h}"></${tag}>`;
 
   function skeleton() {
-    const tiles = Array.from({ length: 8 }, () => `<div class="tile">${sk("55%", "0.9rem")}${sk("40%", "1.6rem")}</div>`).join("");
+    const details = Array.from({ length: 5 }, () => `<div class="detail">${sk("6rem", "1rem")}${sk("4.5rem", "1.3rem")}</div>`).join("");
     const n = 25, cols = `grid-template-columns:repeat(${n}, ${COL}px)`;
     const cells = (w, h, cls) => Array.from({ length: n }, () => `<div>${sk(w, h, cls)}</div>`).join("");
     const rows = Array.from({ length: 7 }, () => `
@@ -387,7 +389,7 @@
           ${sk("8rem", "1.5rem")}
           ${sk("15rem", "1.1rem")}
         </div>
-        <div class="details">${tiles}</div>
+        <div class="details">${details}</div>
       </section>
       <section class="skeleton" aria-hidden="true">
         <h2>시간별 날씨</h2>
@@ -412,7 +414,7 @@
       longitude: lon,
       current: "temperature_2m,relative_humidity_2m,apparent_temperature,is_day,precipitation,weather_code,wind_speed_10m,wind_direction_10m",
       hourly: "temperature_2m,precipitation_probability,weather_code,is_day",
-      daily: "weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunrise,sunset,uv_index_max",
+      daily: "weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max",
       timezone: "Asia/Seoul",
       forecast_days: "7",
       wind_speed_unit: "ms",
@@ -523,7 +525,6 @@
     const tips = [];
     if (rainMax >= 50) tips.push(`오늘 비 올 확률이 ${rainMax}%예요. 우산을 챙기세요.`);
     if (todayMax - todayMin >= 10) tips.push(`일교차가 ${todayMax - todayMin}°로 커요. 겉옷을 챙기세요.`);
-    if (d.uv_index_max[0] >= 8) tips.push("자외선이 매우 강해요. 한낮 외출 시 자외선 차단제를 바르세요.");
     const pm10 = pmGrade(air?.pm10, "pm10");
     const pm25 = pmGrade(air?.pm2_5, "pm25");
     if ((pm10 && pm10[1] === "bad") || (pm25 && pm25[1] === "bad") || (pm10 && pm10[1] === "worst") || (pm25 && pm25[1] === "worst")) {
@@ -544,16 +545,13 @@
           <div class="now-sub">체감 <b class="num">${round(c.apparent_temperature)}°</b> · 최고 <b class="num hi">${todayMax}°</b> · 최저 <b class="num lo">${todayMin}°</b></div>
           ${tips.length ? `<ul class="tips">${tips.map(t => `<li>${t}</li>`).join("")}</ul>` : ""}
         </div>
-        <div class="details">
-          <div class="tile"><span class="label">강수 확률</span><span class="value num">${rainMax ?? "-"}%</span><span class="sub">강수량 ${c.precipitation} mm</span></div>
-          <div class="tile"><span class="label">습도</span><span class="value num">${c.relative_humidity_2m}%</span></div>
-          <div class="tile"><span class="label">바람</span><span class="value num">${c.wind_speed_10m.toFixed(1)} m/s</span><span class="sub">${windDir(c.wind_direction_10m)}</span></div>
-          <div class="tile"><span class="label">자외선</span><span class="value num">${d.uv_index_max[0] != null ? d.uv_index_max[0].toFixed(0) : "-"}</span><span class="sub">${uvLevel(d.uv_index_max[0])}</span></div>
-          <div class="tile"><span class="label">미세먼지 (PM10)</span><span class="value num">${air?.pm10 != null ? round(air.pm10) : "-"}<small class="sub"> ㎍/㎥</small></span>${gradeHtml(pm10)}</div>
-          <div class="tile"><span class="label">초미세먼지 (PM2.5)</span><span class="value num">${air?.pm2_5 != null ? round(air.pm2_5) : "-"}<small class="sub"> ㎍/㎥</small></span>${gradeHtml(pm25)}</div>
-          <div class="tile"><span class="label">일출</span><span class="value num">${hhmm(d.sunrise[0])}</span></div>
-          <div class="tile"><span class="label">일몰</span><span class="value num">${hhmm(d.sunset[0])}</span></div>
-        </div>
+        <dl class="details">
+          <div class="detail"><dt>강수 확률</dt><dd><span class="sub">강수량 ${c.precipitation} mm</span><span class="value num">${rainMax ?? "-"}%</span></dd></div>
+          <div class="detail"><dt>습도</dt><dd><span class="value num">${c.relative_humidity_2m}%</span></dd></div>
+          <div class="detail"><dt>바람</dt><dd><span class="sub">${windDir(c.wind_direction_10m)}</span><span class="value num">${c.wind_speed_10m.toFixed(1)} m/s</span></dd></div>
+          <div class="detail"><dt>미세먼지 (PM10)</dt><dd>${gradeHtml(pm10)}<span class="value num">${air?.pm10 != null ? round(air.pm10) : "-"}<small class="sub"> ㎍/㎥</small></span></dd></div>
+          <div class="detail"><dt>초미세먼지 (PM2.5)</dt><dd>${gradeHtml(pm25)}<span class="value num">${air?.pm2_5 != null ? round(air.pm2_5) : "-"}<small class="sub"> ㎍/㎥</small></span></dd></div>
+        </dl>
       </section>`;
 
     // 시간별: 지금부터 24시간
@@ -600,6 +598,7 @@
             <div class="h-row h-rain" style="${cols}">${hours.map(x => `<div class="num${x.rain < 20 ? " low" : ""}">${x.rain ?? "-"}%</div>`).join("")}</div>
           </div>
         </div>
+        <p class="note">* 맨 아래 % 숫자는 그 시간의 강수 확률이에요.</p>
       </section>`;
 
     // 주간
@@ -627,10 +626,23 @@
       <section class="fade" aria-labelledby="weekly-title">
         <h2 id="weekly-title">주간 날씨</h2>
         <div class="weekly">${rows}</div>
-        <p class="w-note">* 막대는 이번 주 최저 ${round(wMin)}°부터 최고 ${round(wMax)}°까지를 기준으로 그날의 기온 범위를 보여 줘요.</p>
+        <p class="note">* 막대는 이번 주 최저 ${round(wMin)}°부터 최고 ${round(wMax)}°까지를 기준으로 그날의 기온 범위를 보여 줘요.</p>
       </section>`;
 
     content.innerHTML = todayHtml + hourlyHtml + weeklyHtml;
+
+    // 오늘 아이콘: 그림의 실제 왼쪽 끝을 제목과 맞춰요 (날씨마다 SVG 안의 왼쪽 여백이 달라요)
+    const nowIcon = content.querySelector(".now-main svg");
+    nowIcon.style.marginLeft = `${(-nowIcon.getBBox().x * nowIcon.clientWidth / 24).toFixed(1)}px`;
+
+    // 옆으로 넘기는 동안 스크롤바를 보이고, 멈추고 1초 뒤 다시 숨겨요
+    const scroller = content.querySelector(".hourly-scroll");
+    let hideTimer;
+    scroller.addEventListener("scroll", () => {
+      scroller.classList.add("scrolling");
+      clearTimeout(hideTimer);
+      hideTimer = setTimeout(() => scroller.classList.remove("scrolling"), 1000);
+    }, { passive: true });
 
     // 첫 칸: 선·채움과 강수확률이 첫 기온 글자의 왼쪽 끝에서 시작하게 (글꼴이 다 받아진 뒤 실제 폭을 재요)
     const chart = content.querySelector(".hourly-chart");
@@ -647,12 +659,10 @@
   }
 
   select.addEventListener("change", load);
-  document.getElementById("refresh").addEventListener("click", load);
   const themeBtn = document.getElementById("theme");
   function syncThemeButton() {
     const dark = document.documentElement.dataset.theme === "dark";
-    themeBtn.textContent = dark ? "밝게" : "어둡게";
-    themeBtn.setAttribute("aria-pressed", String(dark));
+    themeBtn.setAttribute("aria-checked", String(dark));
   }
   themeBtn.addEventListener("click", () => {
     const dark = document.documentElement.dataset.theme !== "dark";
@@ -663,10 +673,6 @@
   });
   syncThemeButton();
 
-  document.getElementById("locate").addEventListener("click", () => {
-    select.value = HERE;
-    load();
-  });
   load();
 </script>
 </body>
