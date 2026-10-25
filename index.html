@@ -164,6 +164,7 @@
   .w-hi { text-align: left; }
   .bar { position: relative; height: 8px; border-radius: 4px; background: var(--bg); }
   .bar i { position: absolute; top: 0; bottom: 0; border-radius: 4px; background: linear-gradient(90deg, var(--cool), var(--warm)); }
+  .w-note { margin: 12px 0 0; color: var(--muted); font-size: 0.8rem; }
 
   .state { text-align: center; padding: 48px 16px; color: var(--muted); }
   .state button { margin-top: 12px; }
@@ -556,6 +557,7 @@
       <section class="fade" aria-labelledby="weekly-title">
         <h2 id="weekly-title">주간 날씨</h2>
         <div class="weekly">${rows}</div>
+        <p class="w-note">* 막대는 이번 주 최저 ${round(wMin)}°부터 최고 ${round(wMax)}°까지를 기준으로 그날의 기온 범위를 보여 줘요.</p>
       </section>`;
 
     content.style.display = "grid";
