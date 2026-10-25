@@ -1,0 +1,590 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>한반도 날씨</title>
+<script>
+  // 화면을 그리기 전에 저장된 테마를 적용해서 깜빡임을 막아요
+  try { if (localStorage.getItem("weather-theme") === "dark") document.documentElement.dataset.theme = "dark"; } catch {}
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=Archivo:wght@500;600;700&display=swap">
+<style>
+  /* 레이아웃: 위에서 아래로 요약 → 상세. 오늘(큰 기온 + 상세 타일) → 시간별(가로 스크롤 + 기온 곡선) → 주간(기온 범위 막대) */
+  :root {
+    --bg: #dcebf7;
+    --surface: #f3f8fc;
+    --fg: #13283b;
+    --muted: #4d6276;
+    --line: #c5d8e8;
+    --accent: #1767a8;
+    --warm: #c4501f;
+    --cool: #1f6fc0;
+    --rain: #1d76b6;
+    --sun: #e8990c;
+    --cloud: #9db2c6;
+    --aq-good: #1f6fc0;
+    --aq-ok: #1d8650;
+    --aq-bad: #b37400;
+    --aq-worst: #c73333;
+    --font-body: "IBM Plex Sans KR", "Malgun Gothic", "Apple SD Gothic Neo", system-ui, sans-serif;
+    --font-num: "Archivo", "IBM Plex Sans KR", "Malgun Gothic", system-ui, sans-serif;
+  }
+  /* 어두운 테마: 전환 버튼을 눌렀을 때만 적용 */
+  :root[data-theme="dark"] {
+    --bg: #0d141b;
+    --surface: #16202a;
+    --fg: #e7edf3;
+    --muted: #97a7b6;
+    --line: #273540;
+    --accent: #6db3ec;
+    --warm: #f28a5c;
+    --cool: #6daeef;
+    --rain: #63b0ea;
+    --sun: #ffc845;
+    --cloud: #71859a;
+    --aq-good: #6daeef;
+    --aq-ok: #4cc488;
+    --aq-bad: #f2b437;
+    --aq-worst: #f26b6b;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--font-body);
+    font-size: 16px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  main {
+    max-width: 960px;
+    margin: 0 auto;
+    padding-block: 24px 48px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    display: grid;
+    gap: 20px;
+  }
+  .num { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+
+  /* 상단 바 */
+  header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px 16px;
+  }
+  header h1 { margin: 0; font-size: 1.25rem; font-weight: 700; margin-right: auto; }
+  .controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  select, button {
+    font: inherit;
+    font-size: 1rem;
+    color: var(--fg);
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 9px 12px;
+    cursor: pointer;
+  }
+  select { min-width: 9rem; font-weight: 600; }
+  button:hover, select:hover { border-color: var(--accent); }
+  :focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  .updated { color: var(--muted); font-size: 0.9rem; width: 100%; }
+
+  section { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 20px; min-width: 0; }
+  section h2 { margin: 0 0 14px; font-size: 1.05rem; font-weight: 700; }
+
+  /* 오늘 */
+  .today { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 24px; }
+  .now { display: grid; align-content: start; gap: 6px; }
+  .now .place { font-size: 1.1rem; font-weight: 600; }
+  .now-main { display: flex; align-items: center; gap: 12px; }
+  .now-temp { font-size: 4.5rem; font-weight: 600; line-height: 1; letter-spacing: -0.02em; }
+  .now-desc { font-size: 1.3rem; font-weight: 600; }
+  .now-sub { color: var(--muted); font-size: 1rem; }
+  .now-sub b { color: var(--fg); font-weight: 600; }
+  .hi { color: var(--warm); }
+  .lo { color: var(--cool); }
+  .tips { display: grid; gap: 6px; margin-top: 10px; padding: 0; list-style: none; }
+  .tips li { background: var(--bg); border-radius: 10px; padding: 8px 12px; font-size: 0.95rem; }
+
+  .details { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; align-content: start; }
+  .tile { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; display: grid; gap: 2px; }
+  .tile .label { color: var(--muted); font-size: 0.85rem; }
+  .tile .value { font-size: 1.35rem; font-weight: 600; }
+  .tile .sub { font-size: 0.9rem; color: var(--muted); }
+  .grade { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; font-size: 0.95rem; }
+  .grade::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: currentColor; }
+  .grade.good { color: var(--aq-good); }
+  .grade.ok { color: var(--aq-ok); }
+  .grade.bad { color: var(--aq-bad); }
+  .grade.worst { color: var(--aq-worst); }
+
+  /* 시간별 */
+  .hourly-scroll { overflow-x: auto; margin: 0 -20px; padding: 0 20px 6px; scrollbar-width: thin; }
+  .hourly-inner { position: relative; }
+  .h-row { display: grid; justify-items: center; }
+  .h-row > div { text-align: center; width: 100%; }
+  .h-times > div { font-size: 0.9rem; color: var(--muted); padding-bottom: 6px; }
+  .h-times > .now-col { color: var(--fg); font-weight: 700; }
+  .h-times > .newday { color: var(--accent); font-weight: 700; }
+  .h-icons > div { padding: 2px 0; }
+  .h-rain > div { font-size: 0.85rem; color: var(--rain); font-weight: 600; padding-top: 4px; }
+  .h-rain > div.low { color: var(--muted); font-weight: 400; }
+  .hourly-chart { display: block; }
+  .hourly-chart text { fill: var(--fg); font-family: var(--font-num); font-size: 15px; font-weight: 600; }
+  .day-line { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--line); }
+
+  /* 주간 */
+  .weekly { display: grid; }
+  .w-row {
+    display: grid;
+    grid-template-columns: 4.5rem minmax(0, 1.4fr) 3.2rem 2.6rem minmax(70px, 2fr) 2.6rem;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 0;
+    border-top: 1px solid var(--line);
+  }
+  .w-row:first-child { border-top: none; }
+  .w-day { display: grid; line-height: 1.25; }
+  .w-day b { font-size: 1.05rem; }
+  .w-day span { color: var(--muted); font-size: 0.85rem; }
+  .w-day.weekend b { color: var(--warm); }
+  .w-sky { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .w-sky span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .w-rain { color: var(--rain); font-weight: 600; font-size: 0.95rem; text-align: right; }
+  .w-rain.low { color: var(--muted); font-weight: 400; }
+  .w-lo, .w-hi { font-size: 1.1rem; font-weight: 600; text-align: right; }
+  .w-hi { text-align: left; }
+  .bar { position: relative; height: 8px; border-radius: 4px; background: var(--bg); }
+  .bar i { position: absolute; top: 0; bottom: 0; border-radius: 4px; background: linear-gradient(90deg, var(--cool), var(--warm)); }
+
+  .state { text-align: center; padding: 48px 16px; color: var(--muted); }
+  .state button { margin-top: 12px; }
+  footer { color: var(--muted); font-size: 0.85rem; text-align: center; }
+  footer a { color: inherit; }
+
+  @media (max-width: 720px) {
+    .today { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 520px) {
+    section { padding: 16px; }
+    .hourly-scroll { margin: 0 -16px; padding: 0 16px 6px; }
+    .now-temp { font-size: 3.8rem; }
+    .w-row { grid-template-columns: 3.6rem 2rem 2.8rem 2.2rem minmax(40px, 1fr) 2.2rem; gap: 8px; }
+    .w-sky span { display: none; }
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .fade { animation: fade 0.35s ease-out both; }
+    @keyframes fade { from { transform: translateY(4px); } to { transform: none; } }
+  }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>한반도 날씨</h1>
+    <div class="controls">
+      <label for="region" class="sr-only" hidden>지역</label>
+      <select id="region" aria-label="지역 선택"></select>
+      <button id="locate" type="button">현재 위치</button>
+      <button id="refresh" type="button">새로고침</button>
+      <button id="theme" type="button" aria-pressed="false">어둡게</button>
+    </div>
+    <div class="updated" id="updated">예보를 불러오는 중이에요…</div>
+  </header>
+
+  <div id="content">
+    <section class="state">날씨 정보를 불러오는 중이에요…</section>
+  </div>
+
+  <footer>자료: <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a> 예보 · 미세먼지 등급은 환경부 기준</footer>
+</main>
+
+<script>
+  const REGIONS = [
+    ["서울·인천", [["서울", 37.5665, 126.9780], ["인천", 37.4563, 126.7052]]],
+    ["경기", [
+      ["가평", 37.8315, 127.5105], ["고양", 37.6584, 126.8320], ["과천", 37.4292, 126.9876], ["광명", 37.4786, 126.8646],
+      ["광주(경기)", 37.4295, 127.2550], ["구리", 37.5943, 127.1296], ["군포", 37.3617, 126.9352], ["김포", 37.6153, 126.7156],
+      ["남양주", 37.6360, 127.2165], ["동두천", 37.9036, 127.0606], ["부천", 37.5034, 126.7660], ["성남", 37.4200, 127.1267],
+      ["수원", 37.2636, 127.0286], ["시흥", 37.3800, 126.8030], ["안산", 37.3219, 126.8309], ["안성", 37.0080, 127.2797],
+      ["안양", 37.3943, 126.9568], ["양주", 37.7853, 127.0458], ["양평", 37.4917, 127.4875], ["여주", 37.2984, 127.6374],
+      ["연천", 38.0966, 127.0748], ["오산", 37.1499, 127.0775], ["용인", 37.2411, 127.1776], ["의왕", 37.3447, 126.9683],
+      ["의정부", 37.7381, 127.0337], ["이천", 37.2723, 127.4350], ["파주", 37.7599, 126.7802], ["평택", 36.9921, 127.1129],
+      ["포천", 37.8949, 127.2003], ["하남", 37.5393, 127.2149], ["화성", 37.1995, 126.8312],
+    ]],
+    ["강원", [["춘천", 37.8813, 127.7298], ["강릉", 37.7519, 128.8761]]],
+    ["충청", [["대전", 36.3504, 127.3845], ["세종", 36.4800, 127.2890], ["청주", 36.6424, 127.4890]]],
+    ["전라", [["전주", 35.8242, 127.1480], ["광주", 35.1595, 126.8526], ["목포", 34.8118, 126.3922], ["여수", 34.7604, 127.6622]]],
+    ["경상", [["대구", 35.8714, 128.6014], ["안동", 36.5684, 128.7294], ["포항", 36.0190, 129.3435], ["울산", 35.5384, 129.3114], ["부산", 35.1796, 129.0756], ["창원", 35.2280, 128.6811]]],
+    ["제주", [["제주", 33.4996, 126.5312], ["서귀포", 33.2541, 126.5600]]],
+  ];
+  const PLACES = Object.fromEntries(REGIONS.flatMap(([, items]) => items.map(([name, lat, lon]) => [name, { lat, lon }])));
+
+  const select = document.getElementById("region");
+  const content = document.getElementById("content");
+  const updated = document.getElementById("updated");
+
+  const HERE = "__here";
+  select.append(new Option("현재 위치", HERE));
+  for (const [group, items] of REGIONS) {
+    const og = document.createElement("optgroup");
+    og.label = group;
+    for (const [name] of items) og.append(new Option(name, name));
+    select.append(og);
+  }
+  select.value = loadRegion();
+
+  function loadRegion() {
+    try {
+      const saved = localStorage.getItem("weather-region");
+      if (saved === HERE || PLACES[saved]) return saved;
+    } catch {}
+    return HERE;
+  }
+  function saveRegion(name) {
+    try { localStorage.setItem("weather-region", name); } catch {}
+  }
+
+  // 날씨 코드(WMO) → 한국어 설명
+  function describe(code) {
+    if (code === 0) return "맑음";
+    if (code === 1) return "대체로 맑음";
+    if (code === 2) return "구름 조금";
+    if (code === 3) return "흐림";
+    if (code === 45 || code === 48) return "안개";
+    if (code >= 51 && code <= 57) return "이슬비";
+    if (code === 61 || code === 80) return "약한 비";
+    if (code === 63 || code === 81) return "비";
+    if (code === 65 || code === 82) return "강한 비";
+    if (code === 66 || code === 67) return "어는 비";
+    if (code === 71 || code === 85) return "약한 눈";
+    if (code === 73) return "눈";
+    if (code === 75 || code === 86) return "많은 눈";
+    if (code === 77) return "싸락눈";
+    if (code === 95) return "뇌우";
+    if (code === 96 || code === 99) return "우박 동반 뇌우";
+    return "알 수 없음";
+  }
+
+  function kindOf(code, isDay) {
+    if (code === 0) return isDay ? "clear-day" : "clear-night";
+    if (code <= 2) return isDay ? "partly-day" : "partly-night";
+    if (code === 3) return "cloudy";
+    if (code === 45 || code === 48) return "fog";
+    if ((code >= 71 && code <= 77) || code === 85 || code === 86) return "snow";
+    if (code >= 95) return "thunder";
+    return "rain";
+  }
+
+  // 날씨 아이콘 (인라인 SVG, 24×24 기준)
+  const CLOUD_PATH = "M7.5 19h9.5a4 4 0 0 0 .6-7.96A5.5 5.5 0 0 0 7 10.1 4.5 4.5 0 0 0 7.5 19z";
+  function sun(cx, cy, r, ray) {
+    let rays = "";
+    for (let i = 0; i < 8; i++) {
+      const a = (Math.PI / 4) * i;
+      const x1 = cx + Math.cos(a) * (r + 2), y1 = cy + Math.sin(a) * (r + 2);
+      const x2 = cx + Math.cos(a) * (r + 2 + ray), y2 = cy + Math.sin(a) * (r + 2 + ray);
+      rays += `<line x1="${x1.toFixed(2)}" y1="${y1.toFixed(2)}" x2="${x2.toFixed(2)}" y2="${y2.toFixed(2)}"/>`;
+    }
+    return `<g stroke="var(--sun)" stroke-width="1.6" stroke-linecap="round">${rays}</g><circle cx="${cx}" cy="${cy}" r="${r}" fill="var(--sun)"/>`;
+  }
+  function moon(cx, cy, r) {
+    return `<path d="M${cx + r * 0.3} ${cy - r}a${r} ${r} 0 1 0 ${r * 0.7} ${r * 1.55} ${r * 0.8} ${r * 0.8} 0 0 1 -${r * 0.7} -${r * 1.55}z" fill="var(--sun)"/>`;
+  }
+  function cloud(dy = 0) {
+    return `<path transform="translate(0 ${dy})" d="${CLOUD_PATH}" fill="var(--cloud)"/>`;
+  }
+  function icon(kind, size = 32) {
+    let body = "";
+    switch (kind) {
+      case "clear-day": body = sun(12, 12, 4.5, 2.5); break;
+      case "clear-night": body = moon(11, 12, 7); break;
+      case "partly-day": body = `<g transform="translate(-3 -3) scale(.75)">${sun(12, 12, 4.5, 2.5)}</g>` + cloud(1); break;
+      case "partly-night": body = `<g transform="translate(-1 -2) scale(.7)">${moon(11, 12, 7)}</g>` + cloud(1); break;
+      case "cloudy": body = cloud(-1); break;
+      case "fog": body = `<g stroke="var(--cloud)" stroke-width="2" stroke-linecap="round"><line x1="4" y1="8" x2="20" y2="8"/><line x1="3" y1="12.5" x2="18" y2="12.5"/><line x1="6" y1="17" x2="21" y2="17"/></g>`; break;
+      case "rain": body = cloud(-5) + `<g stroke="var(--rain)" stroke-width="1.8" stroke-linecap="round"><line x1="8" y1="17" x2="7" y2="21"/><line x1="12" y1="17" x2="11" y2="21"/><line x1="16" y1="17" x2="15" y2="21"/></g>`; break;
+      case "snow": body = cloud(-5) + `<g fill="var(--rain)"><circle cx="8" cy="18" r="1.3"/><circle cx="12" cy="20.5" r="1.3"/><circle cx="16" cy="18" r="1.3"/></g>`; break;
+      case "thunder": body = cloud(-5) + `<path d="M12.5 14.5 9.5 19h2.5l-1 4 4-5.5h-2.6l1.3-3z" fill="var(--sun)"/>`; break;
+    }
+    return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" aria-hidden="true">${body}</svg>`;
+  }
+
+  const DIRS = ["북", "북북동", "북동", "동북동", "동", "동남동", "남동", "남남동", "남", "남남서", "남서", "서남서", "서", "서북서", "북서", "북북서"];
+  const windDir = deg => DIRS[Math.round(deg / 22.5) % 16] + "풍";
+
+  function uvLevel(uv) {
+    if (uv == null) return "-";
+    if (uv < 3) return "낮음";
+    if (uv < 6) return "보통";
+    if (uv < 8) return "높음";
+    if (uv < 11) return "매우 높음";
+    return "위험";
+  }
+
+  function pmGrade(v, type) {
+    if (v == null) return null;
+    const t = type === "pm10" ? [30, 80, 150] : [15, 35, 75];
+    if (v <= t[0]) return ["좋음", "good"];
+    if (v <= t[1]) return ["보통", "ok"];
+    if (v <= t[2]) return ["나쁨", "bad"];
+    return ["매우나쁨", "worst"];
+  }
+
+  const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
+  const hhmm = iso => iso.slice(11, 16);
+  const round = v => Math.round(v);
+
+  async function fetchWeather({ lat, lon }, signal) {
+    const params = new URLSearchParams({
+      latitude: lat,
+      longitude: lon,
+      current: "temperature_2m,relative_humidity_2m,apparent_temperature,is_day,precipitation,weather_code,wind_speed_10m,wind_direction_10m",
+      hourly: "temperature_2m,precipitation_probability,weather_code,is_day",
+      daily: "weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunrise,sunset,uv_index_max",
+      timezone: "Asia/Seoul",
+      forecast_days: "7",
+      wind_speed_unit: "ms",
+    });
+    const res = await fetch("https://api.open-meteo.com/v1/forecast?" + params, { signal });
+    if (!res.ok) throw new Error("forecast " + res.status);
+    return res.json();
+  }
+
+  async function fetchAir({ lat, lon }, signal) {
+    try {
+      const params = new URLSearchParams({ latitude: lat, longitude: lon, current: "pm10,pm2_5", timezone: "Asia/Seoul" });
+      const res = await fetch("https://air-quality-api.open-meteo.com/v1/air-quality?" + params, { signal });
+      if (!res.ok) return null;
+      return (await res.json()).current;
+    } catch {
+      return null;
+    }
+  }
+
+  function getPosition() {
+    return new Promise((resolve, reject) => {
+      if (!navigator.geolocation) return reject({ code: 0 });
+      navigator.geolocation.getCurrentPosition(
+        p => resolve({ lat: p.coords.latitude, lon: p.coords.longitude }),
+        reject,
+        { enableHighAccuracy: false, timeout: 10000, maximumAge: 10 * 60 * 1000 }
+      );
+    });
+  }
+
+  function geoErrorText(err) {
+    if (err.code === 1) return "위치 권한이 꺼져 있어요. 주소창의 위치 아이콘에서 허용해 주세요.";
+    if (err.code === 2) return "현재 위치를 확인할 수 없어요.";
+    if (err.code === 3) return "위치 확인 시간이 초과됐어요.";
+    return "이 브라우저는 위치 기능을 지원하지 않아요.";
+  }
+
+  // 목록에 있는 도시 중 가장 가까운 곳 (하버사인 거리, km)
+  function nearestPlace({ lat, lon }) {
+    const rad = v => (v * Math.PI) / 180;
+    let best = null;
+    for (const [name, p] of Object.entries(PLACES)) {
+      const dLat = rad(p.lat - lat), dLon = rad(p.lon - lon);
+      const a = Math.sin(dLat / 2) ** 2 + Math.cos(rad(lat)) * Math.cos(rad(p.lat)) * Math.sin(dLon / 2) ** 2;
+      const km = 6371 * 2 * Math.asin(Math.sqrt(a));
+      if (!best || km < best.km) best = { name, km };
+    }
+    return best;
+  }
+
+  let controller = null;
+
+  async function load() {
+    const choice = select.value;
+    saveRegion(choice);
+    if (controller) controller.abort();
+    controller = new AbortController();
+    const { signal } = controller;
+
+    let place, label, notice = "";
+    if (choice === HERE) {
+      updated.textContent = "현재 위치를 확인하는 중이에요…";
+      try {
+        place = await getPosition();
+        const near = nearestPlace(place);
+        label = near.km <= 30 ? `현재 위치 (${near.name} 부근)` : "현재 위치";
+      } catch (err) {
+        place = PLACES["서울"];
+        label = "서울";
+        notice = `${geoErrorText(err)} 대신 서울 날씨를 보여드려요. · `;
+      }
+      if (signal.aborted) return;
+    } else {
+      place = PLACES[choice];
+      label = choice;
+    }
+
+    updated.textContent = `${label} 예보를 불러오는 중이에요…`;
+    try {
+      const [weather, air] = await Promise.all([fetchWeather(place, signal), fetchAir(place, signal)]);
+      if (signal.aborted) return;
+      render(label, weather, air);
+      updated.textContent = `${notice}${hhmm(weather.current.time)} 기준 · 한국 시간`;
+    } catch (err) {
+      if (err.name === "AbortError") return;
+      updated.textContent = "예보를 불러오지 못했어요.";
+      content.innerHTML = `<section class="state">날씨 정보를 불러오지 못했어요. 인터넷 연결을 확인한 뒤 다시 시도해 주세요.<br><button type="button" id="retry">다시 시도</button></section>`;
+      document.getElementById("retry").addEventListener("click", load);
+    }
+  }
+
+  function render(name, w, air) {
+    const c = w.current, d = w.daily, h = w.hourly;
+
+    // 오늘
+    const todayMax = round(d.temperature_2m_max[0]);
+    const todayMin = round(d.temperature_2m_min[0]);
+    const rainMax = d.precipitation_probability_max[0];
+    const tips = [];
+    if (rainMax >= 50) tips.push(`오늘 비 올 확률이 ${rainMax}%예요. 우산을 챙기세요.`);
+    if (todayMax - todayMin >= 10) tips.push(`일교차가 ${todayMax - todayMin}°로 커요. 겉옷을 챙기세요.`);
+    if (d.uv_index_max[0] >= 8) tips.push("자외선이 매우 강해요. 한낮 외출 시 자외선 차단제를 바르세요.");
+    const pm10 = pmGrade(air?.pm10, "pm10");
+    const pm25 = pmGrade(air?.pm2_5, "pm25");
+    if ((pm10 && pm10[1] === "bad") || (pm25 && pm25[1] === "bad") || (pm10 && pm10[1] === "worst") || (pm25 && pm25[1] === "worst")) {
+      tips.push("미세먼지가 나빠요. 외출할 때 마스크를 쓰세요.");
+    }
+
+    const gradeHtml = g => g ? `<span class="grade ${g[1]}">${g[0]}</span>` : `<span class="sub">정보 없음</span>`;
+
+    const todayHtml = `
+      <section class="today fade" aria-labelledby="today-title">
+        <div class="now">
+          <h2 id="today-title" class="place">${name} · 지금</h2>
+          <div class="now-main">
+            ${icon(kindOf(c.weather_code, c.is_day), 72)}
+            <div class="now-temp num">${round(c.temperature_2m)}°</div>
+          </div>
+          <div class="now-desc">${describe(c.weather_code)}</div>
+          <div class="now-sub">체감 <b class="num">${round(c.apparent_temperature)}°</b> · 최고 <b class="num hi">${todayMax}°</b> · 최저 <b class="num lo">${todayMin}°</b></div>
+          ${tips.length ? `<ul class="tips">${tips.map(t => `<li>${t}</li>`).join("")}</ul>` : ""}
+        </div>
+        <div class="details">
+          <div class="tile"><span class="label">강수 확률</span><span class="value num">${rainMax ?? "-"}%</span><span class="sub">강수량 ${c.precipitation} mm</span></div>
+          <div class="tile"><span class="label">습도</span><span class="value num">${c.relative_humidity_2m}%</span></div>
+          <div class="tile"><span class="label">바람</span><span class="value num">${c.wind_speed_10m.toFixed(1)} m/s</span><span class="sub">${windDir(c.wind_direction_10m)}</span></div>
+          <div class="tile"><span class="label">자외선</span><span class="value num">${d.uv_index_max[0] != null ? d.uv_index_max[0].toFixed(0) : "-"}</span><span class="sub">${uvLevel(d.uv_index_max[0])}</span></div>
+          <div class="tile"><span class="label">미세먼지 (PM10)</span><span class="value num">${air?.pm10 != null ? round(air.pm10) : "-"}<small class="sub"> ㎍/㎥</small></span>${gradeHtml(pm10)}</div>
+          <div class="tile"><span class="label">초미세먼지 (PM2.5)</span><span class="value num">${air?.pm2_5 != null ? round(air.pm2_5) : "-"}<small class="sub"> ㎍/㎥</small></span>${gradeHtml(pm25)}</div>
+          <div class="tile"><span class="label">일출</span><span class="value num">${hhmm(d.sunrise[0])}</span></div>
+          <div class="tile"><span class="label">일몰</span><span class="value num">${hhmm(d.sunset[0])}</span></div>
+        </div>
+      </section>`;
+
+    // 시간별: 지금부터 24시간
+    const nowKey = c.time.slice(0, 13) + ":00";
+    let start = h.time.indexOf(nowKey);
+    if (start < 0) start = 0;
+    const hours = [];
+    for (let i = start; i < Math.min(start + 25, h.time.length); i++) {
+      hours.push({ time: h.time[i], temp: h.temperature_2m[i], rain: h.precipitation_probability[i], code: h.weather_code[i], isDay: h.is_day[i] });
+    }
+    const COL = 64, CH = 78, n = hours.length, width = n * COL;
+    const temps = hours.map(x => x.temp);
+    const tMin = Math.min(...temps), tMax = Math.max(...temps);
+    const span = Math.max(tMax - tMin, 1);
+    const y = t => 26 + (1 - (t - tMin) / span) * (CH - 38);
+    const pts = hours.map((x, i) => [i * COL + COL / 2, y(x.temp)]);
+    const line = pts.map(p => p.map(v => v.toFixed(1)).join(",")).join(" ");
+    const area = `M${pts[0][0]},${CH} L${line.replace(/ /g, " L")} L${pts[n - 1][0]},${CH} Z`;
+
+    const timeCells = [], dayLines = [];
+    hours.forEach((x, i) => {
+      const hr = Number(x.time.slice(11, 13));
+      if (i === 0) timeCells.push(`<div class="now-col">지금</div>`);
+      else if (hr === 0) {
+        timeCells.push(`<div class="newday">${Number(x.time.slice(8, 10))}일</div>`);
+        dayLines.push(`<span class="day-line" style="left:${i * COL}px"></span>`);
+      } else timeCells.push(`<div class="num">${hr}시</div>`);
+    });
+    const cols = `grid-template-columns:repeat(${n}, ${COL}px)`;
+
+    const hourlyHtml = `
+      <section class="fade" aria-labelledby="hourly-title">
+        <h2 id="hourly-title">시간별 날씨</h2>
+        <div class="hourly-scroll" tabindex="0" aria-label="시간별 날씨, 옆으로 스크롤">
+          <div class="hourly-inner" style="width:${width}px">
+            ${dayLines.join("")}
+            <div class="h-row h-times" style="${cols}">${timeCells.join("")}</div>
+            <div class="h-row h-icons" style="${cols}">${hours.map(x => `<div title="${describe(x.code)}">${icon(kindOf(x.code, x.isDay), 30)}</div>`).join("")}</div>
+            <svg class="hourly-chart" width="${width}" height="${CH}" viewBox="0 0 ${width} ${CH}" aria-hidden="true">
+              <path d="${area}" fill="var(--accent)" fill-opacity="0.08"/>
+              <polyline points="${line}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round"/>
+              ${pts.map((p, i) => `<circle cx="${p[0]}" cy="${p[1].toFixed(1)}" r="3" fill="var(--accent)"/><text x="${p[0]}" y="${(p[1] - 9).toFixed(1)}" text-anchor="middle">${round(hours[i].temp)}°</text>`).join("")}
+            </svg>
+            <div class="h-row h-rain" style="${cols}">${hours.map(x => `<div class="num${x.rain < 20 ? " low" : ""}">${x.rain ?? "-"}%</div>`).join("")}</div>
+          </div>
+        </div>
+      </section>`;
+
+    // 주간
+    const wMin = Math.min(...d.temperature_2m_min), wMax = Math.max(...d.temperature_2m_max);
+    const wSpan = Math.max(wMax - wMin, 1);
+    const rows = d.time.map((date, i) => {
+      const [yy, mm, dd] = date.split("-").map(Number);
+      const day = new Date(yy, mm - 1, dd).getDay();
+      const label = i === 0 ? "오늘" : i === 1 ? "내일" : WEEKDAYS[day] + "요일";
+      const lo = d.temperature_2m_min[i], hi = d.temperature_2m_max[i];
+      const left = ((lo - wMin) / wSpan) * 100, barW = Math.max(((hi - lo) / wSpan) * 100, 3);
+      const rain = d.precipitation_probability_max[i];
+      return `
+        <div class="w-row">
+          <div class="w-day${day === 0 || day === 6 ? " weekend" : ""}"><b>${label}</b><span class="num">${mm}.${dd}</span></div>
+          <div class="w-sky">${icon(kindOf(d.weather_code[i], 1), 30)}<span>${describe(d.weather_code[i])}</span></div>
+          <div class="w-rain num${rain < 20 ? " low" : ""}" title="강수 확률">${rain ?? "-"}%</div>
+          <div class="w-lo num lo">${round(lo)}°</div>
+          <div class="bar" aria-hidden="true"><i style="left:${left.toFixed(1)}%;width:${barW.toFixed(1)}%"></i></div>
+          <div class="w-hi num hi">${round(hi)}°</div>
+        </div>`;
+    }).join("");
+
+    const weeklyHtml = `
+      <section class="fade" aria-labelledby="weekly-title">
+        <h2 id="weekly-title">주간 날씨</h2>
+        <div class="weekly">${rows}</div>
+      </section>`;
+
+    content.style.display = "grid";
+    content.style.gap = "20px";
+    content.innerHTML = todayHtml + hourlyHtml + weeklyHtml;
+  }
+
+  select.addEventListener("change", load);
+  document.getElementById("refresh").addEventListener("click", load);
+  const themeBtn = document.getElementById("theme");
+  function syncThemeButton() {
+    const dark = document.documentElement.dataset.theme === "dark";
+    themeBtn.textContent = dark ? "밝게" : "어둡게";
+    themeBtn.setAttribute("aria-pressed", String(dark));
+  }
+  themeBtn.addEventListener("click", () => {
+    const dark = document.documentElement.dataset.theme !== "dark";
+    if (dark) document.documentElement.dataset.theme = "dark";
+    else delete document.documentElement.dataset.theme;
+    try { localStorage.setItem("weather-theme", dark ? "dark" : "light"); } catch {}
+    syncThemeButton();
+  });
+  syncThemeButton();
+
+  document.getElementById("locate").addEventListener("click", () => {
+    select.value = HERE;
+    load();
+  });
+  load();
+</script>
+</body>
+</html>
