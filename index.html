@@ -166,6 +166,18 @@
   .bar i { position: absolute; top: 0; bottom: 0; border-radius: 4px; background: linear-gradient(90deg, var(--cool), var(--warm)); }
   .w-note { margin: 12px 0 0; color: var(--muted); font-size: 0.8rem; }
 
+  /* 불러오는 중: 실제 화면과 같은 틀에 글자 대신 회색 막대 */
+  .sk { display: block; max-width: 100%; border-radius: 6px; background: var(--line); }
+  .sk.round { border-radius: 50%; }
+  .skeleton .now { gap: 10px; }
+  .skeleton .tile .sk { margin: 3px 0; }
+  .skeleton .hourly-scroll { overflow: hidden; }
+  .skeleton .h-row .sk { margin: 4px auto; }
+  .skeleton .w-day { gap: 5px; }
+  .skeleton .w-rain .sk, .skeleton .w-lo .sk { margin-left: auto; }
+
+  #content { display: grid; gap: 20px; }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   .state { text-align: center; padding: 48px 16px; color: var(--muted); }
   .state button { margin-top: 12px; }
   footer { color: var(--muted); font-size: 0.85rem; text-align: center; }
@@ -184,6 +196,8 @@
   @media (prefers-reduced-motion: no-preference) {
     .fade { animation: fade 0.35s ease-out both; }
     @keyframes fade { from { transform: translateY(4px); } to { transform: none; } }
+    .sk { background: linear-gradient(90deg, var(--line) 30%, var(--surface) 50%, var(--line) 70%) 0 0 / 300% 100%; animation: shimmer 1.4s linear infinite; }
+    @keyframes shimmer { from { background-position: 100% 0; } to { background-position: 0 0; } }
   }
 </style>
 </head>
@@ -344,6 +358,54 @@
   const hhmm = iso => iso.slice(11, 16);
   const round = v => Math.round(v);
 
+  // 시간별 칸 너비와 기온 곡선 높이 (스켈레톤도 같은 값을 써요)
+  const COL = 64, CH = 78;
+  // 주소에 ?slow를 붙이면 응답을 2초 늦게 그려요 (스켈레톤 확인용)
+  const SLOW = new URLSearchParams(location.search).has("slow");
+
+  const sk = (w, h, cls = "", tag = "i") => `<${tag} class="sk${cls}" style="width:${w};height:${h}"></${tag}>`;
+
+  function skeleton() {
+    const tiles = Array.from({ length: 8 }, () => `<div class="tile">${sk("55%", "0.9rem")}${sk("40%", "1.6rem")}</div>`).join("");
+    const n = 25, cols = `grid-template-columns:repeat(${n}, ${COL}px)`;
+    const cells = (w, h, cls) => Array.from({ length: n }, () => `<div>${sk(w, h, cls)}</div>`).join("");
+    const rows = Array.from({ length: 7 }, () => `
+      <div class="w-row">
+        <div class="w-day">${sk("3rem", "1.05rem")}${sk("2.4rem", "0.8rem")}</div>
+        <div class="w-sky">${sk("30px", "30px", " round")}${sk("4.5rem", "1rem", "", "span")}</div>
+        <div class="w-rain">${sk("2rem", "0.95rem")}</div>
+        <div class="w-lo">${sk("1.8rem", "1.1rem")}</div>
+        ${sk("100%", "8px")}
+        <div class="w-hi">${sk("1.8rem", "1.1rem")}</div>
+      </div>`).join("");
+    return `
+      <p class="sr-only">날씨 정보를 불러오는 중이에요.</p>
+      <section class="today skeleton" aria-hidden="true">
+        <div class="now">
+          ${sk("12rem", "1.3rem")}
+          <div class="now-main">${sk("72px", "72px", " round")}${sk("2.2em", "1em", " now-temp")}</div>
+          ${sk("8rem", "1.5rem")}
+          ${sk("15rem", "1.1rem")}
+        </div>
+        <div class="details">${tiles}</div>
+      </section>
+      <section class="skeleton" aria-hidden="true">
+        <h2>시간별 날씨</h2>
+        <div class="hourly-scroll">
+          <div class="hourly-inner" style="width:${n * COL}px">
+            <div class="h-row h-times" style="${cols}">${cells("1.8rem", "1rem")}</div>
+            <div class="h-row h-icons" style="${cols}">${cells("30px", "30px", " round")}</div>
+            <div style="height:${CH}px;padding:24px ${COL / 2 - 15}px 14px">${sk("100%", "100%")}</div>
+            <div class="h-row h-rain" style="${cols}">${cells("1.8rem", "0.9rem")}</div>
+          </div>
+        </div>
+      </section>
+      <section class="skeleton" aria-hidden="true">
+        <h2>주간 날씨</h2>
+        <div class="weekly">${rows}</div>
+      </section>`;
+  }
+
   async function fetchWeather({ lat, lon }, signal) {
     const params = new URLSearchParams({
       latitude: lat,
@@ -410,6 +472,8 @@
     if (controller) controller.abort();
     controller = new AbortController();
     const { signal } = controller;
+    content.setAttribute("aria-busy", "true");
+    content.innerHTML = skeleton();
 
     let place, label, notice = "";
     if (choice === HERE) {
@@ -431,13 +495,19 @@
 
     updated.textContent = `${label} 예보를 불러오는 중이에요…`;
     try {
-      const [weather, air] = await Promise.all([fetchWeather(place, signal), fetchAir(place, signal)]);
+      const [weather, air] = await Promise.all([
+        fetchWeather(place, signal),
+        fetchAir(place, signal),
+        SLOW && new Promise(r => setTimeout(r, 2000)),
+      ]);
       if (signal.aborted) return;
+      content.removeAttribute("aria-busy");
       render(label, weather, air);
       updated.textContent = `${notice}${hhmm(weather.current.time)} 기준 · 한국 시간`;
     } catch (err) {
       if (err.name === "AbortError") return;
       updated.textContent = "예보를 불러오지 못했어요.";
+      content.removeAttribute("aria-busy");
       content.innerHTML = `<section class="state">날씨 정보를 불러오지 못했어요. 인터넷 연결을 확인한 뒤 다시 시도해 주세요.<br><button type="button" id="retry">다시 시도</button></section>`;
       document.getElementById("retry").addEventListener("click", load);
     }
@@ -494,7 +564,7 @@
     for (let i = start; i < Math.min(start + 25, h.time.length); i++) {
       hours.push({ time: h.time[i], temp: h.temperature_2m[i], rain: h.precipitation_probability[i], code: h.weather_code[i], isDay: h.is_day[i] });
     }
-    const COL = 64, CH = 78, n = hours.length, width = n * COL;
+    const n = hours.length, width = n * COL;
     const temps = hours.map(x => x.temp);
     const tMin = Math.min(...temps), tMax = Math.max(...temps);
     const span = Math.max(tMax - tMin, 1);
@@ -560,9 +630,20 @@
         <p class="w-note">* 막대는 이번 주 최저 ${round(wMin)}°부터 최고 ${round(wMax)}°까지를 기준으로 그날의 기온 범위를 보여 줘요.</p>
       </section>`;
 
-    content.style.display = "grid";
-    content.style.gap = "20px";
     content.innerHTML = todayHtml + hourlyHtml + weeklyHtml;
+
+    // 첫 칸: 선·채움과 강수확률이 첫 기온 글자의 왼쪽 끝에서 시작하게 (글꼴이 다 받아진 뒤 실제 폭을 재요)
+    const chart = content.querySelector(".hourly-chart");
+    document.fonts.ready.then(() => {
+      if (!chart.isConnected) return;
+      const x0 = chart.querySelector("text").getBBox().x.toFixed(1);
+      const y0 = pts[0][1].toFixed(1);
+      chart.querySelector("polyline").setAttribute("points", `${x0},${y0} ${line}`);
+      chart.querySelector("path").setAttribute("d", `M${x0},${CH} L${x0},${y0} L${line.replace(/ /g, " L")} L${pts[n - 1][0]},${CH} Z`);
+      const firstRain = content.querySelector(".h-rain > div");
+      firstRain.style.textAlign = "left";
+      firstRain.style.paddingLeft = `${x0}px`;
+    });
   }
 
   select.addEventListener("change", load);
