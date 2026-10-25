@@ -127,7 +127,7 @@
   .grade.worst { color: var(--aq-worst); }
 
   /* 시간별 */
-  .hourly-scroll { overflow-x: auto; margin: 0 -20px; padding: 0 20px 6px; scrollbar-width: thin; }
+  .hourly-scroll { overflow-x: auto; margin: 0 -20px; padding: 0 20px 6px 4px; scrollbar-width: thin; }
   .hourly-inner { position: relative; }
   .h-row { display: grid; justify-items: center; }
   .h-row > div { text-align: center; width: 100%; }
@@ -175,7 +175,7 @@
   }
   @media (max-width: 520px) {
     section { padding: 16px; }
-    .hourly-scroll { margin: 0 -16px; padding: 0 16px 6px; }
+    .hourly-scroll { margin: 0 -16px; padding: 0 16px 6px 0; }
     .now-temp { font-size: 3.8rem; }
     .w-row { grid-template-columns: 3.6rem 2rem 2.8rem 2.2rem minmax(40px, 1fr) 2.2rem; gap: 8px; }
     .w-sky span { display: none; }
