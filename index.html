@@ -135,7 +135,12 @@
   .chips .label { color: var(--muted); font-size: 0.8rem; }
   .chips b { font-size: 1.1rem; font-weight: 600; }
   .chips small { color: var(--muted); font-size: 0.75rem; font-weight: 400; }
-  .chips .chip-air { justify-items: start; }
+  .chips .chip-air { justify-items: start; position: relative; cursor: help; }
+  /* 미세먼지 수치 말풍선: 마우스를 올리거나, 탭·키보드로 포커스하면 바로 보여요 */
+  .tip { position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%); z-index: 1; display: grid; gap: 2px; padding: 7px 11px; border-radius: 8px; background: var(--fg); color: var(--bg); font-size: 0.8rem; white-space: nowrap; opacity: 0; visibility: hidden; pointer-events: none; }
+  .tip b { font-size: inherit; }
+  .tip::after { content: ""; position: absolute; top: 100%; left: 50%; margin-left: -5px; border: 5px solid transparent; border-top-color: var(--fg); }
+  .chip-air:hover .tip, .chip-air:focus-within .tip { opacity: 1; visibility: visible; }
   .chips .chip-air .grade { font-size: 0.85rem; }
   .hi { color: var(--warm); }
   .lo { color: var(--cool); }
@@ -186,7 +191,7 @@
   .w-rain.low { color: var(--muted); font-weight: 400; }
   .w-lo, .w-hi { font-size: 1.1rem; font-weight: 600; text-align: right; }
   .w-hi { text-align: left; }
-  .bar { position: relative; height: 8px; border-radius: 4px; background: var(--line); }
+  .bar { position: relative; height: 8px; }
   .bar i { position: absolute; top: 0; bottom: 0; border-radius: 4px; background: linear-gradient(90deg, var(--cool), var(--warm)); }
   .note { margin: 12px 0 0; color: var(--muted); font-size: 0.8rem; }
 
@@ -236,11 +241,10 @@
       <select id="region" aria-label="지역 선택"></select>
       <button id="theme" type="button" class="switch" role="switch" aria-checked="false">다크 모드<span class="track" aria-hidden="true"><span class="thumb"></span></span></button>
     </div>
-    <div class="updated" id="updated">예보를 불러오는 중이에요…</div>
+    <div class="updated" id="updated">&nbsp;</div>
   </header>
 
   <div id="content">
-    <section class="state">날씨 정보를 불러오는 중이에요…</section>
   </div>
 
   <footer>자료: <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a> 예보 · 미세먼지 등급은 환경부 기준</footer>
@@ -498,10 +502,10 @@
     const { signal } = controller;
     content.setAttribute("aria-busy", "true");
     content.innerHTML = skeleton();
+    updated.textContent = " "; // 불러오는 동안은 비워 두되 줄 높이는 유지해요 (스켈레톤이 진행 상태를 보여 줘요)
 
     let place, label, notice = "";
     if (choice === HERE) {
-      updated.textContent = "현재 위치를 확인하는 중이에요…";
       try {
         place = await getPosition();
         const near = nearestPlace(place);
@@ -517,7 +521,6 @@
       label = choice;
     }
 
-    updated.textContent = `${label} 예보를 불러오는 중이에요…`;
     try {
       const [weather, air] = await Promise.all([
         fetchWeather(place, signal),
@@ -581,7 +584,8 @@
           <div class="tm-parts">${partHtml("오전", part(6, 12))}${partHtml("오후", part(12, 18))}</div>
         </div>`;
 
-    const airTitle = `미세먼지 ${air?.pm10 != null ? round(air.pm10) + "㎍/㎥" : "정보 없음"} · 초미세먼지 ${air?.pm2_5 != null ? round(air.pm2_5) + "㎍/㎥" : "정보 없음"}`;
+    const pmText = v => v != null ? `<b class="num">${round(v)}</b> ㎍/㎥` : "정보 없음";
+    const airTip = `<span class="tip" role="tooltip" id="air-tip"><span>미세먼지 ${pmText(air?.pm10)}</span><span>초미세먼지 ${pmText(air?.pm2_5)}</span></span>`;
 
     const todayHtml = `
       <section class="today fade" aria-labelledby="today-title">
@@ -602,7 +606,7 @@
           <li><span class="label">${windDir(c.wind_direction_10m)}</span><b class="num">${c.wind_speed_10m.toFixed(1)}<small>m/s</small></b></li>
           <li><span class="label">습도</span><b class="num">${c.relative_humidity_2m}<small>%</small></b></li>
           <li><span class="label">강수 확률</span><b class="num">${rainMax ?? "-"}<small>%</small></b></li>
-          <li class="chip-air" title="${airTitle}"><span><span class="label">미세</span> ${gradeHtml(pm10)}</span><span><span class="label">초미세</span> ${gradeHtml(pm25)}</span></li>
+          <li class="chip-air" tabindex="0" aria-describedby="air-tip"><span><span class="label">미세</span> ${gradeHtml(pm10)}</span><span><span class="label">초미세</span> ${gradeHtml(pm25)}</span>${airTip}</li>
         </ul>
         ${tips.length ? `<ul class="tips">${tips.map(t => `<li>${t}</li>`).join("")}</ul>` : ""}
       </section>`;
@@ -679,7 +683,7 @@
       <section class="fade" aria-labelledby="weekly-title">
         <h2 id="weekly-title">주간 날씨</h2>
         <div class="weekly">${rows}</div>
-        <p class="note">* 막대는 이번 주 최저 ${round(wMin)}°부터 최고 ${round(wMax)}°까지를 기준으로 그날의 기온 범위를 보여 줘요.</p>
+        <p class="note">* 오른쪽일수록 따뜻하고, 막대가 길수록 일교차가 커요.</p>
       </section>`;
 
     content.innerHTML = todayHtml + hourlyHtml + weeklyHtml;
